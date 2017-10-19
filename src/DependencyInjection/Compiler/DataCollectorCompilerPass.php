@@ -38,29 +38,42 @@ class DataCollectorCompilerPass implements CompilerPassInterface
         $serviceIds          = $container->findTaggedServiceIds('cache.provider');
 
         foreach (array_keys($serviceIds) as $id) {
+            $poolDefinition = $proxyDefinition = $container->getDefinition($id);
+            $poolClass = $poolDefinition->getClass();
 
-            // Get the pool definition and rename it.
-            $poolDefinition = $container->getDefinition($id);
-            if (null === $poolDefinition->getFactory()) {
-                // Just replace the class
-                $proxyClass = $proxyFactory->createProxy($poolDefinition->getClass(), $file);
-                $poolDefinition->setClass($proxyClass);
-                $poolDefinition->setFile($file);
-                $poolDefinition->addMethodCall('__setName', [$id]);
-            } else {
-                // Create a new ID for the original service
+            if ($poolDefinition->getFactory() !== null) {
+                $factory = $container->get($poolDefinition->getFactory()[0]);
+
+                // This is crappy: we should have a proper way to know the class of the CachePool created by each factory
+                if (!is_subclass_of($factory, '\Cache\AdapterBundle\Factory\AbstractAdapterFactory')) {
+                    throw new \InvalidArgumentException(sprintf('Cache factory "%s" does not inherit from AbstractAdapterFactory (this is not supported for now).'));
+                }
+
+                $factoryClass = $container->getDefinition($poolDefinition->getFactory()[0])->getClass();
+                $dependenciesReflection = new \ReflectionProperty($factoryClass, 'dependencies');
+                $dependenciesReflection->setAccessible(true);
+                $dependencies = $dependenciesReflection->getValue($factory);
+                $poolClass = $dependencies[0]['requiredClass'];
+
+                // Rename the original service.
                 $innerId = $id.'.inner';
                 $container->setDefinition($innerId, $poolDefinition);
 
-                // Create a new definition.
-                $decoratedPool = new Definition($poolDefinition->getClass());
-                $decoratedPool->setFactory([new Reference('cache.decorating_factory'), 'create']);
-                $decoratedPool->setArguments([new Reference($innerId)]);
-                $container->setDefinition($id, $decoratedPool);
-                $decoratedPool->addMethodCall('__setName', [$id]);
+                // Create a new definition and pass it the renamed service.
+                $proxyDefinition = new Definition();
+                $proxyDefinition->setFactory([new Reference('cache.decorating_factory'), 'create']);
+                $proxyDefinition->setArguments([new Reference($innerId)]);
+                $container->setDefinition($id, $proxyDefinition);
             }
 
-            // Tell the collector to add the new instance
+            $proxyClass = $proxyFactory->getProxyClass($poolClass);
+            $proxyFile = $proxyFactory->createProxy($poolClass);
+
+            $proxyDefinition->setClass($proxyClass);
+            $proxyDefinition->setFile($proxyFile);
+            $proxyDefinition->addMethodCall('__setName', [$id]);
+
+            // Tell the collector to add the proxy instance.
             $collectorDefinition->addMethodCall('addInstance', [$id, new Reference($id)]);
         }
     }

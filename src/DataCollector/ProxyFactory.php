@@ -55,9 +55,8 @@ class ProxyFactory
 
         $this->checkProxyDirectory();
         file_put_contents($proxyFile, $content);
-        require $proxyFile;
 
-        return $proxyClass;
+        return $proxyFile;
     }
 
     private function checkProxyDirectory()
@@ -67,7 +66,14 @@ class ProxyFactory
         }
     }
 
-    private function getProxyClass($namespace)
+    /**
+     * Get the FQCN of a proxy class for a given CacheItemPool
+     *
+     * @param string $namespace
+     *
+     * @return string
+     */
+    public function getProxyClass($namespace)
     {
         return 'php_cache_proxy_'.str_replace('\\', '_', $namespace);
     }

@@ -41,7 +41,7 @@ class DecoratingFactory
      */
     public function create($originalObject)
     {
-        $proxyClass = $this->proxyFactory->createProxy(get_class($originalObject));
+        $proxyClass = $this->proxyFactory->getProxyClass(get_class($originalObject));
         $reflection = new \ReflectionClass($proxyClass);
         $pool       = $reflection->newInstanceWithoutConstructor();
 
