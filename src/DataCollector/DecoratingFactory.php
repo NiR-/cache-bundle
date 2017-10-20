@@ -41,6 +41,11 @@ class DecoratingFactory
      */
     public function create($originalObject)
     {
+        if ($originalObject instanceof \ProxyManager\Proxy\ValueHolderInterface) {
+            $originalObject->initializeProxy();
+            $originalObject = $originalObject->getWrappedValueHolderValue();
+        }
+
         $proxyClass = $this->proxyFactory->getProxyClass(get_class($originalObject));
         $reflection = new \ReflectionClass($proxyClass);
         $pool       = $reflection->newInstanceWithoutConstructor();
